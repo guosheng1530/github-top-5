@@ -37,6 +37,8 @@ class BudgetTracker:
     completion_tokens: int = 0
     sink: UsageSink | None = None
     warnings: list[str] = field(default_factory=list)
+    # 失败/非计费的尝试次数（仅审计，不计入硬预算限额）
+    failed_attempts: int = 0
 
     SOFT_RATIO = 0.8
 
@@ -61,21 +63,38 @@ class BudgetTracker:
 
     def record(self, *, provider: str, kind: str, prompt_tokens: int = 0,
                completion_tokens: int = 0, ok: bool = True,
-               redacted_error: str = "") -> None:
-        """记录一次真实返回了 usage 的调用。"""
-        self.calls += 1
-        self.prompt_tokens += max(0, prompt_tokens)
-        self.completion_tokens += max(0, completion_tokens)
+               redacted_error: str = "", billable: bool | None = None) -> None:
+        """记录一次调用。
+
+        ``billable`` 决定是否计入硬预算限额计数器（``calls``/token）：
+        * 默认跟随 ``ok``——成功的、真正消耗配额的调用才计费；
+        * 失败的尝试（网络错误/5xx/重试）只累加 ``failed_attempts`` 并落库审计，
+          **不**消耗调用预算额度。
+
+        这修正了原先的缺陷：失败重试会让 ``calls += 1``，而 ``check_before_call``
+        以 ``calls >= hard_calls`` 判断，导致几次网络抖动重试就吃掉整个调用预算。
+        """
+        if billable is None:
+            billable = ok
+        if billable:
+            self.calls += 1
+            self.prompt_tokens += max(0, prompt_tokens)
+            self.completion_tokens += max(0, completion_tokens)
+        else:
+            self.failed_attempts += 1
         cost = (
             max(0, prompt_tokens) / 1000 * self.price_input_per_1k
             + max(0, completion_tokens) / 1000 * self.price_output_per_1k
-        )
+        ) if billable else 0.0
         if self.sink:
             self.sink.record_api_call(
                 provider=provider, kind=kind,
-                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                prompt_tokens=prompt_tokens if billable else 0,
+                completion_tokens=completion_tokens if billable else 0,
                 estimate_cost_cny=round(cost, 4), ok=ok, redacted_error=redacted_error,
             )
+        if not billable:
+            return
         soft_calls = self.hard_calls * self.SOFT_RATIO
         soft_tokens = self.hard_tokens * self.SOFT_RATIO
         if self.calls == int(soft_calls) or (soft_tokens and self.total_tokens >= soft_tokens
@@ -85,6 +104,7 @@ class BudgetTracker:
     def summary(self) -> dict:
         return {
             "calls": self.calls,
+            "failed_attempts": self.failed_attempts,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,

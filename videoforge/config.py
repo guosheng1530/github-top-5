@@ -14,11 +14,75 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_ROOT = PROJECT_ROOT / "output"
+
+
+# --------------------------------------------------------------------------- #
+# 跨平台中文字体发现
+# --------------------------------------------------------------------------- #
+# 为什么不再把字体路径写死成 ``C:/Windows/Fonts/msyh.ttc``？
+#   原始实现只在 Windows 可用；在 Linux/macOS 上该文件不存在，Pillow 的
+#   ``ImageFont.truetype`` 会抛 OSError，整个视觉阶段崩溃。这里按优先级探测
+#   常见 CJK 字体（Windows 雅黑/黑体 → Noto CJK → 文泉驿 → macOS 苹方），
+#   并允许用 ``CJK_FONT_REGULAR`` / ``CJK_FONT_BOLD`` 环境变量显式覆盖。
+#   找不到任何中文字体时返回 None，由调用方给出清晰的、可诊断的错误，
+#   而不是在渲染第一张卡时才神秘崩溃。
+
+# (常规字体候选, 粗体字体候选)——粗体缺失时回退常规。
+_CJK_REGULAR_CANDIDATES = [
+    "C:/Windows/Fonts/msyh.ttc",            # 微软雅黑 (Windows)
+    "C:/Windows/Fonts/simhei.ttf",          # 黑体 (Windows)
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",       # 文泉驿正黑
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",     # 文泉驿微米黑
+    "/usr/share/fonts/wenquanyi/wqy-zenhei/wqy-zenhei.ttc",
+    "/System/Library/Fonts/PingFang.ttc",   # 苹方 (macOS)
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+]
+_CJK_BOLD_CANDIDATES = [
+    "C:/Windows/Fonts/msyhbd.ttc",          # 微软雅黑 Bold (Windows)
+    "C:/Windows/Fonts/simhei.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+]
+
+
+def _first_existing(candidates: list[str], env_override: str | None = None) -> str | None:
+    if env_override:
+        p = os.getenv(env_override, "").strip()
+        if p and Path(p).exists():
+            return p
+    for c in candidates:
+        if Path(c).exists():
+            return c
+    return None
+
+
+def resolve_cjk_font(bold: bool = False) -> str | None:
+    """返回可用的中文字体文件绝对路径；都找不到返回 None。
+
+    环境变量 ``CJK_FONT_REGULAR`` / ``CJK_FONT_BOLD`` 可显式指定（优先级最高）。
+    """
+    if bold:
+        return (_first_existing(_CJK_BOLD_CANDIDATES, "CJK_FONT_BOLD")
+                or _first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR"))
+    return _first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR")
+
+
+def cjk_fontsdir() -> str | None:
+    """libass ``fontsdir`` 用的目录：取已解析字体文件所在目录。"""
+    f = resolve_cjk_font(False)
+    return str(Path(f).parent) if f else None
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -70,9 +134,14 @@ class Settings:
     )
 
     # ---- 配音 ----
-    # auto：优先 edge-tts（更自然，需联网且未被风控），失败回退 SAPI 离线语音，
-    # 再失败才使用 ffmpeg 生成“明确标记的合成静音/提示音”。
-    tts_engine: str = field(default_factory=lambda: os.getenv("TTS_ENGINE", "sapi"))
+    # 引擎选择按平台自适应（可用 TTS_ENGINE 覆盖）：
+    #   * Windows：默认 'sapi'——系统自带「Huihui」离线真实中文语音；
+    #   * 其他平台（Linux/macOS）：默认 'auto'——SAPI5 不存在，优先 edge-tts
+    #     （需联网），失败再降级到显式标记的合成提示音轨。
+    # 'auto' 语义：edge-tts → SAPI5 → 合成音轨，逐级降级。
+    tts_engine: str = field(
+        default_factory=lambda: os.getenv(
+            "TTS_ENGINE", "sapi" if sys.platform == "win32" else "auto"))
     tts_voice: str = field(default_factory=lambda: os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural"))
     sapi_voice_keyword: str = field(default_factory=lambda: os.getenv("SAPI_VOICE_KEYWORD", "HUIHUI"))
     sapi_rate: int = field(default_factory=lambda: int(os.getenv("SAPI_RATE", "150")))
@@ -110,6 +179,11 @@ class Settings:
     @property
     def tts_capability_configured(self) -> bool:
         return bool(self.ark_tts_model.strip())
+
+    @property
+    def cjk_font_path(self) -> str | None:
+        """当前环境可用的中文字体文件路径（找不到返回 None）。"""
+        return resolve_cjk_font(False)
 
 
 _settings: Settings | None = None

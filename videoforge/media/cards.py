@@ -15,11 +15,13 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+from videoforge.config import resolve_cjk_font
 from videoforge.schemas import StoryboardScene
 
 # 调色板（深色科技风）
@@ -32,13 +34,34 @@ GREY = (160, 174, 192)
 CARD_FILL = (20, 33, 51, 235)
 RANK_COLORS = [(255, 209, 102), (192, 203, 215), (205, 127, 50), ACCENT, (160, 174, 192)]
 
-FONT_REG = "C:/Windows/Fonts/msyh.ttc"
-FONT_BOLD = "C:/Windows/Fonts/msyhbd.ttc"
+
+class FontUnavailableError(RuntimeError):
+    """环境中找不到任何中文字体——信息卡无法正确渲染中文。
+
+    这是显式失败（而不是渲染出满屏豆腐块方块），便于在视觉阶段早期诊断。
+    """
+
+
+@lru_cache(maxsize=2)
+def _resolve_font_path(bold: bool) -> str:
+    """解析一次并缓存。找不到时抛出可诊断的错误。"""
+    path = resolve_cjk_font(bold)
+    if not path:
+        raise FontUnavailableError(
+            "未找到可用的中文字体。请安装 CJK 字体后重试：\n"
+            "  Debian/Ubuntu: apt-get install fonts-noto-cjk\n"
+            "  或设置环境变量 CJK_FONT_REGULAR / CJK_FONT_BOLD 指向 .ttf/.ttc 文件。")
+    return path
+
+
+@lru_cache(maxsize=256)
+def _cached_font(path: str, size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(path, size)
 
 
 def _font(size: int, bold: bool = False, sf: float = 1.0) -> ImageFont.FreeTypeFont:
-    path = FONT_BOLD if bold and Path(FONT_BOLD).exists() else FONT_REG
-    return ImageFont.truetype(path, max(10, int(size * sf)))
+    path = _resolve_font_path(bold)
+    return _cached_font(path, max(10, int(size * sf)))
 
 
 def _gradient(w: int, h: int) -> Image.Image:

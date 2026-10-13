@@ -58,10 +58,39 @@ class Workflow:
         self.llm = llm
         self.github = github
         self.tts = tts
+        self._closed = False
         self.ctx = AgentContext(
             job_id=self.job_id, settings=self.settings, db=self.db,
             budget=self.budget, job_dir=self.job_dir, logger=self.logger,
             llm=llm, github=github, tts=tts)
+
+    def close(self) -> None:
+        """释放外部资源：SQLite 连接、HTTP 客户端。
+
+        原实现把 DB 连接交给进程生命周期，在单次 CLI 调用里问题不大，但在
+        多任务、--resume、FastAPI 常驻进程或测试里会累积未关闭的连接；
+        Windows 上未关闭的 SQLite 连接还会持有文件锁，影响后续访问。
+        幂等：重复调用安全。
+        """
+        if self._closed:
+            return
+        self._closed = True
+        for obj in (self.llm, self.github):
+            try:
+                if obj is not None and hasattr(obj, "close"):
+                    obj.close()
+            except Exception:  # noqa: BLE001 清理阶段不抛
+                pass
+        try:
+            self.db.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __enter__(self) -> "Workflow":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     # ------------------------------------------------------------- helpers
     def _to(self, status: JobStatus, stage: str | None = None, msg: str = "") -> None:
@@ -262,9 +291,20 @@ class Workflow:
                 # 其余高问题（编码/分辨率）直接重渲染
                 self._to(JobStatus.RETRYING, StageName.QA.value, f"第 {round_n+1} 轮返工：重渲染")
                 self._to(JobStatus.RENDERING, StageName.QA.value)
-                audio_paths = {sc.scene_id: next(
-                    (self.ctx.assets_dir / "audio").glob(f"{sc.scene_id}.*"))
-                    for sc in storyboard.scenes}
+                audio_dir = self.ctx.assets_dir / "audio"
+                audio_paths = {}
+                missing = []
+                for sc in storyboard.scenes:
+                    hit = next(iter(sorted(audio_dir.glob(f"{sc.scene_id}.*"))), None)
+                    if hit is None:
+                        missing.append(sc.scene_id)
+                    else:
+                        audio_paths[sc.scene_id] = hit
+                if missing:
+                    # 音频缺失说明上一步配音未完整落盘：重做配音而非盲目重渲染
+                    self.logger.warning("重渲染发现缺失音频 %s，改走重配音", ",".join(missing))
+                    self._revoice_and_rerender(storyboard, round_n + 1)
+                    continue
                 RenderAgent(self.ctx).run((storyboard, audio_paths))
                 self._to(JobStatus.QUALITY_REVIEW, StageName.RENDER.value)
 
@@ -327,4 +367,5 @@ class Workflow:
             result = OpenClawAdapter(notify_enabled=True).notify_completion(
                 self.job_id, str(self.job_dir / "final_video.mp4"), report.passed)
             self.logger.info("OpenClaw 通知：%s", result)
-        # 数据库连接交由进程生命周期管理（关闭后调用方仍可能查询终态/产物）
+        # 数据库连接由调用方在任务结束后统一关闭（Workflow.close() / 上下文管理器）；
+        # 此处 finalize 已完成全部落库，终态与产物均已持久化。

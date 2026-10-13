@@ -55,7 +55,8 @@ def cmd_check(args) -> int:
         import subprocess
         v = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout.splitlines()[0]
         print(f"             {v}")
-    print(f"中文字体    : 雅黑={'有' if __import__('pathlib').Path('C:/Windows/Fonts/msyh.ttc').exists() else '无'}")
+    cjk = s.cjk_font_path
+    print(f"中文字体    : {'有 → ' + cjk if cjk else '❌ 未找到（装 fonts-noto-cjk 或设 CJK_FONT_REGULAR）'}")
     oc = OpenClawAdapter().detect()
     print(f"OpenClaw    : {oc['version'] if oc['installed'] else '未安装'}")
     if oc["installed"]:
@@ -88,7 +89,10 @@ def cmd_demo(args) -> int:
     wf = Workflow(settings=s, mode="demo", llm=None, github=github, tts=tts,
                   job_id=getattr(args, "job_id", None))
     print(f"启动 demo 任务 {wf.job_id}（零 LLM 费用；真实 GitHub 数据 + SAPI 旁白）")
-    wf.run(resume=args.resume)
+    try:
+        wf.run(resume=args.resume)
+    finally:
+        wf.close()
     print(f"\n✅ 完成：{wf.job_dir / 'final_video.mp4'}")
     print(f"   目录：{wf.job_dir}")
     return 0
@@ -105,7 +109,10 @@ def cmd_run(args) -> int:
                   job_id=getattr(args, "job_id", None))
     _attach_ark_client(wf)
     print(f"启动真实任务 {wf.job_id}（方舟 {s.ark_model} + GitHub）")
-    wf.run(resume=args.resume)
+    try:
+        wf.run(resume=args.resume)
+    finally:
+        wf.close()
     print(f"\n✅ 完成：{wf.job_dir / 'final_video.mp4'}")
     print(f"   LLM 用量：{wf.budget.summary()}")
     print(f"   目录：{wf.job_dir}")

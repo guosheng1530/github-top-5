@@ -264,6 +264,14 @@ class StoryboardAgent(BaseAgent):
             "deterministic_fallback": "研究/事实核验：火山方舟；编剧：确定性模板（方舟超时回退）",
             "demo_offline": "零 LLM 费用演示：研究/编剧均为确定性离线模式",
         }
+        # 配音来源：分镜阶段尚未配音，按配置的引擎倾向如实描述（不写死某具体引擎），
+        # 真实逐镜 origin（real/synthetic）以 run_manifest.json 为准。
+        tts_pref = self.ctx.settings.tts_engine
+        tts_line = {
+            "sapi": "配音：系统 SAPI5 离线语音 · 画面：Pillow 程序化生成",
+            "edge": "配音：edge-tts 在线神经语音 · 画面：Pillow 程序化生成",
+            "auto": "配音：edge-tts/系统离线语音（自动择优，详见清单）· 画面：Pillow 程序化生成",
+        }.get(tts_pref, "配音：自动择优（详见清单）· 画面：Pillow 程序化生成")
         scenes.append(StoryboardScene(
             scene_id=f"scene-{si:02d}", section_index=si,
             duration_sec=estimate_duration(outro.narration), voiceover=outro.narration,
@@ -271,7 +279,7 @@ class StoryboardAgent(BaseAgent):
             card_data={"title": "感谢观看",
                        "lines": ["数据：GitHub REST API（含采集时间）",
                                  llm_lines.get(gen, llm_lines["deterministic_fallback"]),
-                                 "配音：Windows SAPI5 离线语音 · 画面：Pillow 程序化生成",
+                                 tts_line,
                                  "本排名为自定义启发式评分，非 GitHub 官方榜单"]}))
 
         storyboard = Storyboard(scenes=scenes)

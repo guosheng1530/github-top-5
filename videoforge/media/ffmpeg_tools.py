@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from videoforge.logging_utils import get_logger
@@ -88,8 +89,57 @@ def mean_volume_db(path: Path) -> float | None:
 
 
 def _libass_path(p: Path) -> str:
-    """libass filtergraph 路径转义：正斜杠 + 转义盘符冒号。"""
-    return str(Path(p)).replace("\\", "/").replace(":", "\\:")
+    """libass filtergraph 路径转义。
+
+    libass 的 subtitles 过滤器把路径当 filtergraph 参数解析，特殊字符需转义：
+    * 统一用正斜杠；
+    * 仅 Windows 盘符冒号（如 ``C:``）需要转义成 ``C\\:``——在 POSIX 路径里
+      冒号不是驱动器分隔符，转义反而会破坏路径，故按平台区分处理。
+    """
+    s = str(Path(p)).replace("\\", "/")
+    if sys.platform == "win32":
+        s = s.replace(":", "\\:")
+    return s
+
+
+def _subtitle_filter(subtitle_path: Path) -> str:
+    """构造 libass subtitles 过滤器字符串（跨平台字体与 fontsdir）。"""
+    from videoforge.config import cjk_fontsdir, resolve_cjk_font
+
+    font_file = resolve_cjk_font(bold=False)
+    # 字幕字体名：优先用解析到的字体的 family 名；拿不到就让 libass 用 fontsdir
+    # 里的默认字体。不再硬编码 "Microsoft YaHei"（Linux/macOS 上不存在该字体，
+    # libass 会 fallback 到无中文字形的字体，字幕显示为方块）。
+    font_name = _FONTFILE_TO_FAMILY.get(
+        Path(font_file).name if font_file else "", "")
+    style_parts = [
+        "Fontsize=20", "Bold=1",
+        "PrimaryColour=&H00FFFFFF", "OutlineColour=&H00101820",
+        "BorderStyle=1", "Outline=1", "Shadow=0",
+        "BackColour=&H78000000", "MarginV=30",
+    ]
+    if font_name:
+        style_parts.insert(0, f"FontName={font_name}")
+    style = ",".join(style_parts)
+    flt = f"subtitles='{_libass_path(subtitle_path)}'"
+    fontsdir = cjk_fontsdir()
+    if fontsdir:
+        flt += f":fontsdir='{_libass_path(Path(fontsdir))}'"
+    flt += f":force_style='{style}'"
+    return flt
+
+
+# 常见中文字体文件 → libass 可识别的 family 名
+_FONTFILE_TO_FAMILY = {
+    "msyh.ttc": "Microsoft YaHei",
+    "msyhbd.ttc": "Microsoft YaHei",
+    "simhei.ttf": "SimHei",
+    "NotoSansCJK-Regular.ttc": "Noto Sans CJK SC",
+    "NotoSansCJK-Bold.ttc": "Noto Sans CJK SC",
+    "wqy-zenhei.ttc": "WenQuanYi Zen Hei",
+    "wqy-microhei.ttc": "WenQuanYi Micro Hei",
+    "PingFang.ttc": "PingFang SC",
+}
 
 
 def build_scene_segment(image: Path, audio: Path, out: Path, duration: float, *,
@@ -105,11 +155,7 @@ def build_scene_segment(image: Path, audio: Path, out: Path, duration: float, *,
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p"
     )
     if subtitle_path is not None:
-        style = ("FontName=Microsoft YaHei,Fontsize=20,Bold=1,"
-                 "PrimaryColour=&H00FFFFFF,OutlineColour=&H00101820,"
-                 "BorderStyle=1,Outline=1,Shadow=0,BackColour=&H78000000,MarginV=30")
-        vf += (f",subtitles='{_libass_path(subtitle_path)}':fontsdir='{_libass_path(Path('C:/Windows/Fonts'))}'"
-               f":force_style='{style}'")
+        vf += "," + _subtitle_filter(subtitle_path)
     if fade and duration > 1.2:
         vf += f",fade=t=in:st=0:d=0.4,fade=t=out:st={max(0, duration - 0.4):.2f}:d=0.4"
     cmd = [
