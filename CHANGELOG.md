@@ -16,9 +16,19 @@
 
 （下一版改动先记录在此，发布时移动到带版本号的小节并打 tag。）
 
+---
+
+## [1.3.1] - 2026-10-13
+
 ### 文档
 - README 新增「换机/新检出后启用 Seedream 生图」小节：因 `.env` 不入库，说明拉取 tag 到
   新机器后如何重新配置 `ARK_IMAGE_MODEL` 启用真实生图，以及 check/manifest 的核验方法。
+
+### 变更
+- `videoforge/__init__.py` 版本号 → 1.3.1。
+
+### 验证
+- `pytest -q` → 40 passed（纯文档/版本改动，不触及运行逻辑）。
 
 ---
 
@@ -154,7 +164,8 @@ Windows 原始实现基线。
 - SQLite 状态机、预算/幂等、脱敏审计日志、FastAPI 本地任务 API。
 - 技术说明书 `docs/TECHNICAL_MANUAL.md` 与自动化测试套件。
 
-[未发布]: https://example.invalid/compare/v1.3.0...HEAD
+[未发布]: https://example.invalid/compare/v1.3.1...HEAD
+[1.3.1]: https://example.invalid/compare/v1.3.0...v1.3.1
 [1.3.0]: https://example.invalid/compare/v1.2.0...v1.3.0
 [1.2.0]: https://example.invalid/compare/v1.1.0...v1.2.0
 [1.1.0]: https://example.invalid/compare/v1.0.0...v1.1.0
