@@ -75,10 +75,15 @@ class FakeLLM:
 
 
 def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
+    # TTS 引擎按平台自适应：Windows 走系统 SAPI5 真实语音；Linux/macOS 无 SAPI
+    # 时走 'auto'（edge-tts 需联网，失败再降级到标记为 synthetic 的占位音轨）。
+    # 这样同一条端到端用例在三平台都能真正跑完整条 DAG，而不是只在 Windows 绿。
+    import sys
+    tts_engine = "sapi" if sys.platform == "win32" else "auto"
     for k, v in {
         "VIDEO_WIDTH": "640", "VIDEO_HEIGHT": "360", "VIDEO_FPS": "15",
         "CANDIDATE_POOL": "5", "MIN_STARS": "1", "RESEARCH_PARALLEL": "2",
-        "TARGET_DURATION_SEC": "90", "TTS_ENGINE": "sapi",
+        "TARGET_DURATION_SEC": "90", "TTS_ENGINE": tts_engine,
     }.items():
         monkeypatch.setenv(k, v)
     settings = Settings()
@@ -86,7 +91,7 @@ def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
 
     from videoforge.providers.tts import TTSChain
     wf = Workflow(settings=settings, mode="demo", github=FakeGitHub(),
-                  llm=FakeLLM(), tts=TTSChain("sapi"), topic="测试主题")
+                  llm=FakeLLM(), tts=TTSChain(tts_engine), topic="测试主题")
     video = wf.run()
 
     assert video.exists()
@@ -103,13 +108,21 @@ def test_full_pipeline_end_to_end(tmp_path, monkeypatch):
     assert len(top5) == 5 and top5[0]["rank"] == 1
 
     report = json.loads((wf.job_dir / "quality_report.json").read_text("utf-8"))
+    # QA 必须通过：成片可听（占位音轨也须达到 audible 门禁）、无高优先级问题。
     assert report["passed"] is True
     assert report["checks"]["srt_timeline"] is True
     assert report["checks"]["all_projects_narrated"] is True
     manifest = json.loads((wf.job_dir / "run_manifest.json").read_text("utf-8"))
     assert manifest["quality_passed"] is True
-    assert any(a["type"] == "audio" and a["origin"] == "real"
-               for a in manifest["artifacts"])
+    # 必须有音频产物；其 origin 诚实反映实际引擎：
+    #   * 有真实 TTS（Windows SAPI / 可联网的 edge-tts）→ 至少一条 real；
+    #   * 否则（纯离线 Linux CI）→ 全部 synthetic，且绝不伪装成 real。
+    audio_arts = [a for a in manifest["artifacts"] if a["type"] == "audio"]
+    assert audio_arts, "成片应包含音频产物"
+    origins = {a["origin"] for a in audio_arts}
+    assert origins <= {"real", "synthetic"}
+    if sys.platform == "win32":
+        assert "real" in origins, "Windows 下应使用 SAPI5 真实语音"
     assert (wf.job_dir / "thumbnail.png").exists()
     assert (wf.job_dir / "subtitles.srt").exists()
     assert (wf.job_dir / "script.md").exists()

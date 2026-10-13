@@ -43,6 +43,17 @@ scripts\tests.ps1                 # 21 个测试
 scripts\serve.ps1                 # http://127.0.0.1:8765/docs
 ```
 
+Linux / macOS 等价命令（脚本自动识别虚拟环境，无需手动指定 Python）：
+
+```bash
+bash scripts/check.sh             # 环境核查 + 方舟最小真实请求
+bash scripts/demo.sh              # 零 LLM 费用出片
+bash scripts/run.sh               # 正式出片（方舟 + GitHub）
+bash scripts/run.sh --resume --job-id <ID>   # 从中断/既有任务恢复
+bash scripts/tests.sh             # 全部测试（Linux 实测 31 passed）
+bash scripts/serve.sh             # http://127.0.0.1:8765/docs
+```
+
 ## 五、下一步建议（按优先级）
 
 1. 若需要 AI 生成画面/云端神经配音：在方舟控制台确认开通对应模型，把模型 ID 填入

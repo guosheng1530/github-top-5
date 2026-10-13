@@ -31,6 +31,39 @@ scripts\run.ps1
 scripts\tests.ps1
 ```
 
+## 快速开始（Linux / macOS）
+
+```bash
+# 0) 系统依赖（一次性）
+#    Linux : sudo apt install ffmpeg fonts-noto-cjk     # 中文字体必装，否则信息卡/字幕是方块
+#    macOS : brew install ffmpeg                         # 中文字体系统自带
+
+# 1) 初始化（建 .venv、装依赖、生成 .env）
+bash scripts/setup.sh
+
+# 2) 编辑 .env 填入 LLM_API_KEY / GITHUB_TOKEN（已自带 .env 可跳过）
+
+# 3) 环境核查（会发一次最小真实 LLM 请求；加 --no-ping 跳过）
+bash scripts/check.sh            # 或 ./scripts/check.sh
+
+# 4) 零费用先跑通 demo（真实 GitHub 数据 + 旁白 + FFmpeg 成片）
+bash scripts/demo.sh
+
+# 5) 正式生成（火山方舟文本研究/编剧，约 5 分钟成片）
+bash scripts/run.sh
+
+# 6) 运行全部测试
+bash scripts/tests.sh
+```
+
+> **跨平台说明**：所有脚本都会**自动探测**虚拟环境里的 Python，无需手动指定。
+> 查找顺序：`.venv`（当前平台原生布局）→ 平台回退目录（Linux 用 `.venv-linux`，
+> Windows 用 `.venv-windows`）→ 系统 `python3`/`py`。因此同一份代码在 Linux、
+> macOS、Windows 上都能直接用对应的 `.sh` / `.ps1` 启动。
+> **虚拟环境不可跨平台移植，也不会被提交**（见 `.gitignore`）；换机器后请重新
+> 运行 `setup`。配音在 Windows 默认走系统 SAPI5 离线语音，Linux/macOS 默认
+> `auto`（edge-tts → 合成兜底）。
+
 产物在 `output/<job_id>/`：
 
 | 文件 | 说明 |

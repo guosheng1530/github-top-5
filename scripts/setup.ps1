@@ -4,12 +4,20 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 
-if (-not (Test-Path ".venv")) {
-    Write-Host ">> 创建虚拟环境 .venv" -ForegroundColor Cyan
-    py -3.14 -m venv .venv
-    if ($LASTEXITCODE -ne 0) { py -m venv .venv }
+# 决定在哪里建 venv。正常用 .venv；但若 .venv 是从 Linux 机器拷来的
+# （只有 bin/，没有 Scripts/），在 Windows 上不可用，改建 .venv-windows。
+$VenvDir = ".venv"
+if ((Test-Path ".venv") -and -not (Test-Path ".venv\Scripts\python.exe")) {
+    Write-Host ">> 检测到 .venv 不是 Windows 虚拟环境（可能来自 Linux），改用 .venv-windows" -ForegroundColor Yellow
+    $VenvDir = ".venv-windows"
 }
-$py = ".\.venv\Scripts\python.exe"
+
+if (-not (Test-Path "$VenvDir\Scripts\python.exe")) {
+    Write-Host ">> 创建虚拟环境 $VenvDir" -ForegroundColor Cyan
+    py -3.14 -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0) { py -m venv $VenvDir }
+}
+$py = ".\$VenvDir\Scripts\python.exe"
 & $py -m pip install --upgrade pip
 & $py -m pip install -r requirements.txt
 

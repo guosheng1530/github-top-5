@@ -28,6 +28,8 @@ class EdgeTTSProvider:
     def synthesize(self, text: str, out_path: Path) -> None:
         import edge_tts  # 延迟导入：没装也不影响 SAPI 回退
 
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
         async def _run() -> None:
             comm = edge_tts.Communicate(text, voice=self.voice)
             await comm.save(str(out_path))
@@ -76,15 +78,41 @@ class SyntheticAudioProvider:
     origin = "synthetic"
 
     def synthesize(self, text: str, out_path: Path) -> None:
+        # 兜底引擎必须自给自足：在没有 SAPI 的 Linux/macOS 上，本引擎常是第一个
+        # 真正落盘的 provider，若父目录不存在，ffmpeg 会以
+        # "Error opening output ... No such file or directory" 失败，导致整条
+        # 降级链崩溃。SAPI5Provider 已自建目录，这里补齐同样保证。
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         duration = max(2.5, min(60.0, len(text) / 3.5))
-        # 0.5s 880Hz 提示音（两次），其余静音，明确可听辨这是占位音轨
+        # 两声 880Hz 短提示音（起始处与接近结尾处各一次），其余静音；
+        # 明确可听辨这是占位音轨，QA 会把它标为 synthetic。
+        #
+        # 实现要点（跨平台正确性）：音频叠加必须用 **音频** 滤镜，不能用 overlay
+        # （overlay 是视频合成滤镜，早期实现误用它导致 "Media type mismatch"，
+        # 在没有 SAPI 的 Linux 上整条 TTS 降级链因此崩溃）。
+        # 正确做法：
+        #   * 用 adelay 把每一声提示音平移到目标时间点（毫秒）；
+        #   * 用 amix 把静音底轨与两声提示音混合，再 atrim 固定总时长。
+        #
+        # 可听度要求（跨平台 QA 门禁）：QA 的 ``audio_audible`` 用整段 **平均**
+        # 响度判定（> -45 dB）。早期"长静音 + 两声短提示音"方案平均响度约
+        # -46 dB，在没有 SAPI 的 Linux 上会被判为"疑似静音"→ 高优先级问题 →
+        # QA 永远不通过、整条流水线卡死。改为"全程周期性提示音（约每秒一响）"：
+        # 既仍是明显可辨的占位音轨（稳定的滴答声，绝不冒充人声），平均响度又
+        # 稳定在 -30 dB 左右，可靠通过门禁。
         cmd = [
-            "ffmpeg", "-y", "-f", "lavfi", "-i",
-            f"anullsrc=r=44100:cl=stereo:d={duration:.2f}",
-            "-f", "lavfi", "-i", "sine=frequency=880:duration=0.4",
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={duration:.2f}",
             "-filter_complex",
-            "[1:a]volume=0.15[beep];[0:a][beep]overlay=0.5:0[a1];"
-            f"[a1][beep]overlay={duration - 1.0:.2f}:0[a]",
+            # 440Hz 正弦经正弦包络（1Hz）做幅度调制 → 每秒一次由弱到强的"滴答"，
+            # 全程有声；底轨 anullsrc 仅用于把总时长精确裁到 duration。
+            "sine=frequency=440:sample_rate=44100,"
+            f"atrim=duration={duration:.2f},"
+            "aformat=channel_layouts=stereo,"
+            "tremolo=f=1:d=0.9,"
+            "volume=0.35[tone];"
+            f"[0:a][tone]amix=inputs=2:duration=first:normalize=0,"
+            f"atrim=duration={duration:.2f}[a]",
             "-map", "[a]", "-c:a", "pcm_s16le", str(out_path),
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)

@@ -37,12 +37,23 @@ OUTPUT_ROOT = PROJECT_ROOT / "output"
 _CJK_REGULAR_CANDIDATES = [
     "C:/Windows/Fonts/msyh.ttc",            # 微软雅黑 (Windows)
     "C:/Windows/Fonts/simhei.ttf",          # 黑体 (Windows)
+    # Debian/Ubuntu（fonts-noto-cjk / fonts-wqy-*）
     "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",       # 文泉驿正黑
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",     # 文泉驿微米黑
     "/usr/share/fonts/wenquanyi/wqy-zenhei/wqy-zenhei.ttc",
+    # RHEL/Rocky/AlmaLinux/Fedora/CentOS（google-noto-sans-cjk-ttc-fonts / wqy-zenhei-fonts）
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+    "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+    # Arch Linux（noto-fonts-cjk / wqy-zenhei）
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/wenquanyi/wqy-zenhei.ttc",
+    # macOS（系统自带）
     "/System/Library/Fonts/PingFang.ttc",   # 苹方 (macOS)
     "/System/Library/Fonts/STHeiti Medium.ttc",
 ]
@@ -53,6 +64,11 @@ _CJK_BOLD_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
     "/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    # RHEL/Rocky/Fedora
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/google-noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+    # macOS
     "/System/Library/Fonts/PingFang.ttc",
 ]
 
@@ -68,15 +84,50 @@ def _first_existing(candidates: list[str], env_override: str | None = None) -> s
     return None
 
 
+def _fontconfig_match() -> str | None:
+    """用 fontconfig 的 ``fc-match`` 发现任意已安装的 CJK 字体。
+
+    为什么需要这个兜底？
+      硬编码路径永远跟不上所有发行版的打包差异（Debian/RHEL/Arch 的 Noto CJK
+      安装目录各不相同；用户还可能装了其它中文字体）。只要系统装了 fontconfig
+      （几乎所有带桌面/字体的 Linux 都有），``fc-match`` 就能按字符集返回一个
+      能渲染中文的真实字体文件路径，彻底摆脱对固定目录的依赖。
+      macOS 装了 fontconfig（如 brew）也适用；Windows 一般没有，走上面的候选表。
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("fc-match") is None:
+        return None
+    # 请求一个包含中文字形的字体：:lang=zh-cn 让 fontconfig 只在支持简中的字体里挑
+    for query in ("Noto Sans CJK SC:lang=zh-cn", ":lang=zh-cn", ":lang=zh"):
+        try:
+            out = subprocess.run(
+                ["fc-match", "-f", "%{file}", query],
+                capture_output=True, text=True, timeout=10,
+            )
+        except Exception:  # noqa: BLE001 - 兜底发现失败不致命
+            return None
+        path = out.stdout.strip()
+        if path and Path(path).exists():
+            return path
+    return None
+
+
 def resolve_cjk_font(bold: bool = False) -> str | None:
     """返回可用的中文字体文件绝对路径；都找不到返回 None。
 
-    环境变量 ``CJK_FONT_REGULAR`` / ``CJK_FONT_BOLD`` 可显式指定（优先级最高）。
+    解析优先级：
+      1. 环境变量 ``CJK_FONT_REGULAR`` / ``CJK_FONT_BOLD``（显式覆盖，最高）；
+      2. 跨平台已知路径候选表（Windows/各 Linux 发行版/macOS）；
+      3. ``fc-match`` fontconfig 动态发现（通用兜底，摆脱硬编码目录）。
     """
     if bold:
         return (_first_existing(_CJK_BOLD_CANDIDATES, "CJK_FONT_BOLD")
-                or _first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR"))
-    return _first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR")
+                or _first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR")
+                or _fontconfig_match())
+    return (_first_existing(_CJK_REGULAR_CANDIDATES, "CJK_FONT_REGULAR")
+            or _fontconfig_match())
 
 
 def cjk_fontsdir() -> str | None:

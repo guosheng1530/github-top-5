@@ -5,9 +5,14 @@ pillow==12.3.0
 pytest==9.1.1
 tenacity==9.2.1
 edge-tts==7.2.8
-pyttsx3==2.99
-pywin32==312
+# 以下两项为 Windows SAPI5 离线语音所需，仅在 Windows 安装；
+# Linux/macOS 上 pip 会按环境标记自动跳过（这些平台走 edge-tts 或合成兜底）。
+pyttsx3==2.99 ; sys_platform == "win32"
+pywin32==312 ; sys_platform == "win32"
 fastapi==0.143.0
 uvicorn==0.54.0
 # 系统依赖（不通过 pip）：FFmpeg 8.1 full build；Node.js 24（OpenClaw 运行时）
-# edge-tts 许可证为 GPL-3.0；默认 TTS 引擎不依赖它（使用系统 SAPI5）
+#   Windows: winget install Gyan.FFmpeg
+#   Linux  : sudo apt install ffmpeg fonts-noto-cjk
+#   macOS  : brew install ffmpeg
+# edge-tts 许可证为 GPL-3.0；Windows 默认 TTS 引擎不依赖它（使用系统 SAPI5）

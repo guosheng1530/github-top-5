@@ -1,5 +1,8 @@
 .env
+# 虚拟环境一律不提交（跨平台不可移植；提交 Windows venv 会在 Linux 上无法运行）。
 .venv/
+.venv-linux/
+.venv-windows/
 __pycache__/
 *.pyc
 .pytest_cache/
