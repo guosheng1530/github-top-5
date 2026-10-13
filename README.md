@@ -79,15 +79,16 @@ bash scripts/tests.sh
 | `research/`、`assets/` | 候选、资料卡、核验结果、画面、配音、分段 |
 | `run.log.jsonl` | 脱敏审计日志 |
 
-## 能力与诚实标注（2026-10-12 实测）
+## 能力与诚实标注（2026-10-13 实测）
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
 | 火山方舟文本 | ✅ 已验证 | Key 属 Coding Plan：`/api/plan/v3`，模型 `ark-code-latest` |
 | GitHub 数据 | ✅ 已验证 | Search/Repository/README 接口，Token 用户 guosheng1530 |
 | 中文配音 | ✅ 真实语音 | Windows SAPI5「Microsoft Huihui」离线合成；edge-tts 因代理风控 403 作可选 |
-| 画面 | 程序化信息卡 | Pillow 生成，全部标 `origin=template`；不调用图片生成 API |
-| 方舟图片/视频/TTS | ⛔ 未开通 | 此 Key 对标准 `/api/v3` 为 401；适配器调用即抛 `CapabilityUnavailable` |
+| 画面 | ✅ 已实测启用 Seedream 生图 | 默认用 Seedream 为每个分镜生成场景图（`origin=real`）；未配置或失败才回退 Pillow 信息卡（`origin=template`）。缩略图始终 Pillow |
+| 方舟图片（Seedream） | ✅ 已实测启用（Agent Plan） | `doubao-seedream-5-0-pro`，专属 Base URL `…/api/plan/v3`、专属 Key；`POST /images/generations` 同步返回。2026-10-13 本机实测返回 200 并产出真实图片，`capabilities.ark_image=verified`。Coding Plan Key 不可用 |
+| 方舟视频/TTS | ⛔ 未开通 | 适配器调用即抛 `CapabilityUnavailable`；画面/音轨走显式回退 |
 | OpenClaw 2026.4.11 | 已安装 | 健康探测可用；网关默认 18789，通知需 `OPENCLAW_NOTIFY=1` 显式开启 |
 | Ruflo | 未安装 | npm `ruflo` 实测归属 `ruvnet/claude-flow`，适配器拒绝猜测式调用 |
 
@@ -100,6 +101,8 @@ bash scripts/tests.sh
 `VIDEO_WIDTH/HEIGHT/VIDEO_FPS/TARGET_DURATION_SEC`、
 `CANDIDATE_POOL/MIN_STARS/PUSHED_WITHIN_DAYS/RESEARCH_PARALLEL`、
 `TTS_ENGINE`（`sapi` 默认 / `edge` / `auto` / `synthetic`）、
+`ARK_IMAGE_MODEL`（填 `doubao-seedream-5-0-pro` 启用 Seedream 生图）、
+`ARK_IMAGE_API_KEY/ARK_IMAGE_BASE_URL/ARK_IMAGE_SIZE/IMAGE_PROVIDER`（Agent Plan 专属）、
 `HARD_BUDGET_CALLS/HARD_BUDGET_TOKENS`、
 `LOCAL_API_HOST/PORT/TOKEN`。详见 [.env.example](.env.example)。
 

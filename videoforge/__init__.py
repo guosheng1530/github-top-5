@@ -12,4 +12,4 @@
 8. :mod:`videoforge.workflow`       DAG 控制器（编排上面所有东西）
 """
 
-__version__ = "1.1.0"
+__version__ = "1.3.0"

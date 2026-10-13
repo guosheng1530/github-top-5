@@ -41,12 +41,17 @@
 
 ### 0.2 七条设计原则（每条都能在代码里找到对应实现）
 
-1. **商业模型只用火山方舟**，且只调用账号真实开通的能力。本 Key 属 Coding Plan
-   （`/api/plan/v3`），文本可用；标准 `/api/v3` 的图片/视频/TTS 返回 401，
-   系统以 `CapabilityUnavailable` 显式失败并回退，绝不把模板素材伪装成 AI 生成。
-   对应：`providers/ark_media.py`、`run_manifest.json` 的 `origins` 字段。
+1. **商业模型只用火山方舟**，且只调用账号真实开通的能力。文本走 Coding Plan
+   （`/api/plan/v3`，`ark-code-latest`）；画面可选接入 **Agent Plan 的 Seedream 生图**
+   （`doubao-seedream-5-0-pro`，同样是 `…/api/plan/v3` 但需 **Agent Plan 专属 Key**，
+   Coding Plan 的 Key 调用会 401）。未开通的能力以 `CapabilityUnavailable` 显式失败并
+   回退，绝不把模板素材伪装成 AI 生成。
+   对应：`providers/ark_media.py`、`agents/production.py:VisualAgent`、
+   `run_manifest.json` 的 `origin` 字段（`real`/`template`/`synthetic`）。
 2. **其余尽量开源/系统自带**：Python、Pillow、FFmpeg、SAPI5、SQLite、pytest。
-3. **4GB 显存不跑扩散模型**：画面是数据准确的信息卡，而不是可能画错数字的生成视频。
+3. **画面默认不依赖本地扩散模型**：未配置生图时用数据准确的 Pillow 信息卡；配置
+   Agent Plan 后由云端 Seedream 生成氛围/场景图作为衬底，事实数字仍由信息卡与字幕保证
+   （生图 prompt 只给风格与主题，不喂具体数字，避免模型“画错数据”）。
 4. **Agent 不是 10 个聊天窗**：每个 Agent 有角色提示词、Pydantic I/O 契约、
    工具白名单、超时、错误分类、失败策略和结构化日志（第 8 章）。
 5. **SQLite 是业务最终状态的唯一权威**（第 5 章），OpenClaw/Ruflo 无权宣布“视频完成”。
@@ -70,14 +75,15 @@ flowchart TB
   WF --> RANK["4 排名：程序评分+LLM点评"] --> ARKT
   WF --> SCR["5 中文编剧"] --> ARKT
   WF --> STORY["6 分镜（确定性转换）"]
-  STORY --> VIS["7 视觉：Pillow 信息卡"]
+  STORY --> VIS["7 视觉：Seedream 生图 ∥ Pillow 信息卡"]
   STORY --> VOI["8 配音字幕：SAPI5/edge-tts/合成兜底"]
   VIS --> REND["9 渲染：FFmpeg 分段+concat"]
   VOI --> REND
   REND --> QA["10 质量审核：ffprobe/volumedetect/SRT校验"]
   QA -->|"高优先级问题：最多两轮定向返工"| VOI
   QA -->|"通过"| OUT["final_video.mp4 + 封面/SRT/脚本/JSON/报告/manifest"]
-  ARKM["方舟图片/视频/TTS"] -.->|"未开通：CapabilityUnavailable"| VIS
+  ARKI["方舟 Agent Plan Seedream 生图<br/>doubao-seedream-5-0-pro"] -.->|"已配置：origin=real"| VIS
+  ARKM["方舟视频/TTS"] -.->|"未开通：CapabilityUnavailable → 回退"| VIS
   OC["OpenClaw 适配器<br/>探测/健康/可选通知"] -.-> WF
   RF["Ruflo 适配器<br/>仅探测，未安装"] -.-> WF
 ```
@@ -352,9 +358,102 @@ Agent 只说“给我结构化 JSON / 给我一张图 / 给我一段音频”，
 
 引擎顺序由 `.env: TTS_ENGINE`（sapi/edge/auto/synthetic）控制。
 
-### 6.5 未开通的媒体能力（`providers/ark_media.py`）
+### 6.5 Agent Plan Seedream 生图（`providers/ark_media.py:ArkImageProvider`，v1.2.0）
 
-图片/视频/TTS 三个类在模型名为空时**立即抛 `CapabilityUnavailable`**，
+从 v1.2.0 起，`ArkImageProvider` 是**真实实现**，接入火山方舟 **Agent Plan** 的同步生图
+接口。**2026-10-13 本机已启用并端到端实测**：在 `.env` 填
+`ARK_IMAGE_MODEL=doubao-seedream-5-0-pro` 后，以 `IMAGE_PROVIDER=seedream`（强制、不回退）
+跑完整 `run`，8 个分镜画面**全部**由 Seedream 真实生成（`origin=real`、
+`provider=volcengine_ark_seedream`），`api_calls` 记 8 次 `kind=image` 成功，
+`run_manifest.json` 的 `capabilities.ark_image` ==
+`verified (Agent Plan plan/v3, doubao-seedream-5-0-pro, size=2K)`、
+`settings.image_provider` == `seedream:doubao-seedream-5-0-pro`，最终输出
+H.264/AAC、1920×1080、约 439s 的 MP4 且 QA 零高优先级问题（缩略图仍为 `template/pillow`）。
+关键技术细节（均经官方文档与本机真实请求核实）：
+
+- **专属端点与鉴权**：Agent Plan 的 Base URL 路径含 `/plan`——
+  `https://ark.cn-beijing.volces.com/api/plan/v3`，并且必须用 **Agent Plan 专属 API Key**；
+  Coding Plan 的文本 Key 调用生图会 401。因此 config 把生图的 base_url/key 做成**独立字段**
+  （`ARK_IMAGE_BASE_URL` / `ARK_IMAGE_API_KEY`），不与文本客户端复用，避免 Key 串用。
+- **接口形态**：`POST {base}/images/generations`，OpenAI 兼容，**同步**返回（无 job_id、
+  无轮询）。请求体 `{model, prompt, size, output_format, response_format, watermark}`。
+- **模型差异处理**：`doubao-seedream-5-0-pro` / `-flash` **不接受**
+  `sequential_image_generation` 与 `stream`（传任何值都会 400）；其余版本可接受
+  `"disabled"`。代码据模型名判断是否下发该字段（`_NO_SEQUENTIAL_MODELS`）。
+- **结果落盘**：返回 `data[0].url`（临时签名 URL，约 24h 过期）或 `data[0].b64_json`
+  （纯 base64）。为避免临时 URL 过期，**统一立即下载/解码写入本地 PNG**，Agent 后续只用
+  本地文件。
+- **超时**：`doubao-seedream-5-0-pro` 实测约 2 分钟/张，客户端超时默认 300s（≥240s）。
+- **可靠性**：tenacity 只对 transient（429/5xx/网络）指数退避重试 3 次；401/403 判
+  permanent 不重试（鉴权错误重试无意义且可能重复计费）；错误文本经 `redact()` 脱敏。
+- **计量**：成功一张记一次 `budget.record(kind="image")`（计入硬预算与审计）；失败以
+  `ok=False` 落库，不计费。
+- **未配置即显式失败**：`ARK_IMAGE_MODEL` 或 Key 为空时 `generate()` 抛
+  `CapabilityUnavailable`，由 `VisualAgent` 走 Pillow 回退（见第 8 章 Agent #7）——
+  绝不把回退画面标成 `real`。
+
+#### 6.5.1 一次真实请求/响应长什么样（教学）
+
+请求（本机实测 payload，Pro 系列不含 `sequential_image_generation`/`stream`）：
+
+```http
+POST https://ark.cn-beijing.volces.com/api/plan/v3/images/generations
+Authorization: Bearer <Agent Plan 专属 Key>
+Content-Type: application/json
+
+{
+  "model": "doubao-seedream-5-0-pro",
+  "prompt": "主题：<分镜标题>。深色科技风格的横版背景插画，16:9，霓虹蓝与金色点缀，几何网格与电路质感，现代、简洁、专业，无文字、无水印、无logo，适合作为技术解说视频的画面衬底",
+  "size": "2K",
+  "output_format": "png",
+  "response_format": "url",
+  "watermark": false
+}
+```
+
+响应（HTTP 200，同步返回，无 job_id）：
+
+```json
+{
+  "model": "doubao-seedream-5-0-pro",
+  "created": 1791897925,
+  "data": [
+    { "url": "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/.../xxx.png?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=...&X-Tos-Expires=86400&..." }
+  ]
+}
+```
+
+要点：`data[0].url` 是**带签名、约 24h 过期的临时对象存储链接**（注意 `X-Tos-Expires`）。
+所以 `generate()` 拿到后**立刻 `GET` 下载并写入本地 PNG**，而不是把这个 URL 存进分镜——
+否则渲染时链接可能已失效。若账号/模型返回的是 `data[0].b64_json`，则 `base64.b64decode`
+后直接落盘，路径一致。
+
+#### 6.5.2 从分镜到画面的数据流（prompt 怎么来）
+
+`VisualAgent._seedream_prompt(scene)` 只用分镜 `card_data` 的**标题/定位**拼主题，再接一段
+固定风格描述；**刻意不喂 star 数、排名等精确数字**——那些由 Pillow 信息卡与字幕保证，
+避免生成模型“画错数据”。即生图只负责“氛围衬底”，事实承载权仍在确定性组件手里
+（对应设计原则 3，第 0.2 节）。
+
+#### 6.5.3 如何验证它确实工作
+
+1. **看配置**：`python -m videoforge.cli check` 的“生图(Seedream)”行应显示
+   `model=doubao-seedream-5-0-pro ... (Agent Plan 专属，含 /plan)`；未配置则提示回退 Pillow。
+2. **看成片清单**：跑 `run` 后打开 `output/<job_id>/run_manifest.json`：
+   - `capabilities.ark_image` == `verified (Agent Plan plan/v3, doubao-seedream-5-0-pro, size=2K)`；
+   - 每个 `assets/images/scene-*.png` 的 `origin` == `real`、
+     `provider` == `volcengine_ark_seedream`、`model` == `doubao-seedream-5-0-pro`；
+     缩略图 `thumbnail.png` 仍是 `template`/`pillow`（设计如此，保证标题文字准确）。
+3. **看用量**：`output/videoforge.db` 的 `api_calls` 表应出现 `kind='image'` 的成功记录，
+   条数 == 分镜数；或 `run` 结束打印的 LLM 用量旁有图片调用计数。
+4. **看日志**：`run.log.jsonl` 会有 `Seedream 生图成功：scene-xx.png (N bytes)`；
+   回退时则是 `Seedream 生图失败，回退 Pillow`。
+5. **强制模式自检**：临时设 `IMAGE_PROVIDER=seedream`（强制、不回退），任一张失败会直接
+   让 VISUAL 阶段报错——用于确认“确实在打 API 而不是悄悄回退”。
+
+### 6.6 仍未开通的媒体能力（视频 / TTS）
+
+`ArkVideoProvider` / `ArkSpeechProvider` 在模型名为空时**立即抛 `CapabilityUnavailable`**，
 错误信息写明“为什么不可用 + 已回退到什么”。视频接口签名
 （`submit/poll` + `ProviderJob(job_id, request_hash)`）已按异步任务预留，
 开通后补实现即可，Agent 层零改动。
@@ -389,7 +488,7 @@ Agent 只说“给我结构化 JSON / 给我一张图 / 给我一段音频”，
 | 4 | 排名 `RankingAgent` | profiles → `RankedProject[]` Top5 | ark.chat_json（仅点评） | 240s | 评分是确定性代码；点评失败用模板句 |
 | 5 | 编剧 `creative.ScriptAgent` | ranked → `Script` | ark.chat_json | 300s | 归一化：缺段/过短段落用确定性兜底段补齐 |
 | 6 | 分镜 `StoryboardAgent` | (script, ranked) → `Storyboard` | 无（纯转换） | 60s | 确定性函数，基本不会失败 |
-| 7 | 视觉 `production.VisualAgent` | storyboard → 8 PNG + 封面 | pillow.render_card、filesystem | 180s | 渲染异常直接失败（本地确定性错误，重试无意义） |
+| 7 | 视觉 `production.VisualAgent` | storyboard → N 画面 + 封面 | ark.seedream_generate、pillow.render_card、filesystem | 900s | 配置则 Seedream 生图(origin=real)；`CapabilityUnavailable`/`ProviderError` 回退 Pillow(origin=template)；`IMAGE_PROVIDER=seedream` 强制不回退 |
 | 8 | 配音字幕 `VoiceAgent` | storyboard → 音频 + 时长回填 + SRT | tts.synthesize、ffprobe、subtitles | 900s | edge→SAPI→合成提示音三级降级 |
 | 9 | 渲染 `RenderAgent` | (storyboard, 音频) → MP4 | ffmpeg.build_segment/concat、ffprobe | 1800s | concat demuxer 失败→concat filter 重编码 |
 | 10 | 质检 `QAAgent` | 成片+字幕+来源 → `QualityReport` | ffprobe、volumedetect、srt.validate、db.query | 600s | 产出问题单；返工由工作流执行（Agent 自己不改片） |
@@ -450,7 +549,31 @@ Agent 只说“给我结构化 JSON / 给我一张图 / 给我一段音频”，
   含失败原因与时间），尾卡据此标注编剧真实来源，manifest 中脚本素材的
   origin/provider 也相应为 `real/ark` 或 `template/deterministic`。
 
-### 8.6 QA 问题单与“定向返工”
+### 8.6 视觉 Agent：Seedream 生图优先、Pillow 兜底（v1.2.0）
+
+`VisualAgent.run()` 对每个分镜依次尝试两条画面来源，并**诚实记录来源**：
+
+1. **优先 Seedream**：当 `IMAGE_PROVIDER` 为 `auto`/`seedream` 且 `ctx.image_provider`
+   已配置（有 Agent Plan 模型与专属 Key）时，调 `provider.generate(prompt, out_path)`
+   生成场景图，产物登记 `origin=real`、`provider=volcengine_ark_seedream`、`model=…`。
+2. **回退 Pillow**：若抛 `CapabilityUnavailable`（未配置）或 `ProviderError`（调用失败），
+   在 `auto` 且 `IMAGE_FALLBACK_TO_TEMPLATE=1` 时回退 `cards.render_scene_image()`，
+   产物登记 `origin=template`、`provider=pillow`。
+3. **强制模式**：`IMAGE_PROVIDER=seedream` 为“只许真生图”——失败直接向上抛，不回退，
+   用于验证真实接入是否打通（避免“以为在用 AI 其实一直在用模板”的错觉）。
+
+两条设计约束值得学习：
+
+- **prompt 不喂事实数字**：`_seedream_prompt()` 只用标题/主题 + 固定风格串
+  （深色科技风、16:9、无文字无水印），绝不把 Star 数等事实写进 prompt——生成模型会把
+  数字画错。精确信息仍由 Pillow 信息卡/字幕/`top5_projects.json` 承载。
+- **封面始终 Pillow**：缩略图 `thumbnail.png` 永远用 `render_thumbnail()` 渲染，保证
+  标题文字准确、可复现；它恒为 `origin=template`。
+
+因此 `run_manifest.json` 里图像产物的 `origin` 会出现 `real`（Seedream）与 `template`
+（Pillow）混合，逐素材如实标注，QA 的 `asset_origins` 统计也据此汇总。
+
+### 8.7 QA 问题单与“定向返工”
 
 QA 只输出结构化问题（`QAIssue`：严重度/责任 Agent/修复指令/证据），
 工作流 `_stage_qa` 根据责任方决定返工范围：
@@ -467,8 +590,15 @@ QA 只输出结构化问题（`QAIssue`：严重度/责任 Agent/修复指令/�
 ### 9.1 为什么画面是信息卡（再强调一次）
 
 技术介绍的核心是**准确的事实**（名称、数字、功能、许可证）。
-程序化卡片：零成本、可复现、数字不会被生成模型篡改、改一个字段重渲一张即可。
-生成式视频留给“确有开通、确有必要”的转场镜头——本项目当前不需要。
+程序化卡片：零成本、可复现、数字不会被生成模型篡改、改一个字段重渲一张即可——
+这是**默认且永远可用**的画面来源，也是未配置生图时的回退。
+
+v1.2.0 起，配置了 Agent Plan 后可用 **Seedream 生成场景/氛围图**作为画面衬底
+（见第 6.5、8.6 节）：它承担“好看”，而**准确的事实仍由信息卡/字幕承载**，二者分工，
+不冲突。**本机 2026-10-13 已启用并实测**：`IMAGE_PROVIDER=auto` + `ARK_IMAGE_MODEL=`
+`doubao-seedream-5-0-pro` 时，分镜画面首选 Seedream 真实生图（`origin=real`），仅当未配置
+或调用失败才回退 Pillow 信息卡（`origin=template`）。生成式视频仍留给“确有开通、确有必要”
+的场景——本项目当前不需要。
 
 ### 9.2 五种卡片（`media/cards.py`）
 
@@ -687,7 +817,9 @@ API：`LOCAL_API_HOST/PORT/TOKEN`。
 2. **SQLite 而非 Postgres/Redis**：单机单用户、免部署、检查点天然在一个文件里；
    多机并发再迁移。
 3. **Pydantic v2 + 标准库 sqlite3/httpx**：依赖少、教学密度高。
-4. **画面以信息卡为主**：事实准确、零成本、4GB 显存友好；生成式视频等账号开通再加。
+4. **画面：Pillow 信息卡保事实，Seedream 生图作可选衬底**：事实数字必须准确、可复现、
+   4GB 显存友好，故默认 Pillow；v1.2.0 接入 Agent Plan 的 Seedream 作为“好看”的首选来源，
+   但二者分工——prompt 不喂事实数字，精确信息永远由信息卡/字幕承载，失败则诚实回退模板。
 5. **TTS 默认 SAPI5**：离线、真实发音人、零费用；edge-tts 被风控时体验稳定。
 6. **评分用程序公式，LLM 只写点评**：榜单必须可复现，不能让模型“感觉排名”。
 7. **每镜独立片段再 concat**：单帧滤镜图易排错、可并行、concat 秒拼。
@@ -759,11 +891,12 @@ API：`LOCAL_API_HOST/PORT/TOKEN`。
 - [x] SQLite 六表保存状态/事件/调用/产物/QA，迁移用 user_version
 - [x] 未配置真实 LLM 时 demo 仍产出**可播放** MP4 并标注模板素材（实测 286.5s）
 - [x] 配置方舟后真实文本调用成功（check 与正式任务实测）
-- [x] 图片/视频/TTS 未开通时抛 `CapabilityUnavailable`，绝不伪装
+- [x] 视频/TTS 未开通时抛 `CapabilityUnavailable`，绝不伪装
+- [x] 画面：配置 Agent Plan 后用 Seedream 生图（origin=real），未配置/失败回退 Pillow（origin=template）；两者在 manifest 逐素材如实标注（v1.2.0）
 - [x] FFmpeg/ffprobe 验收真实轨道；SRT 时间轴经校验
 - [x] QA high 问题定向返工，最多两轮（代码路径 + 测试覆盖）
 - [x] OpenClaw/Ruflo 接入状态如实报告（已装探测/网关离线/同名包归属）
-- [x] 21 个测试真实运行通过，未编造结果
+- [x] 40 个测试真实运行通过（31 基线 + 9 个 Seedream/VisualAgent 用例），未编造结果
 - [x] README 含安装/配置/出片/费用/排错；本书讲清原理与验证方法
 - [x] 每个产物在 manifest 标注 real/template/synthetic
 

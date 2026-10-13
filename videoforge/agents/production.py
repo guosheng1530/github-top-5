@@ -11,6 +11,7 @@ from videoforge.artifacts import register
 from videoforge.media import cards, ffmpeg_tools
 from videoforge.media.subtitles import (build_scene_cues, build_srt,
                                         validate_srt, write_scene_srt, write_srt)
+from videoforge.providers.base import CapabilityUnavailable, ProviderError
 from videoforge.schemas import (QualityReport, QAIssue, StageName, Storyboard,
                                 SubtitleFile)
 
@@ -19,30 +20,73 @@ class VisualAgent(BaseAgent):
     name = "visual_asset_agent"
     stage = StageName.VISUAL
     system_prompt = VISUAL_PROMPT
-    allowed_tools = ("pillow.render_card", "filesystem.write_asset")
-    timeout_sec = 180
+    # 工具白名单：v1.2.0 起允许 Seedream 生图（仅在配置了 Agent Plan 生图能力时真实使用），
+    # 其余情况仍只用 Pillow 程序化信息卡。
+    allowed_tools = ("ark.seedream_generate", "pillow.render_card", "filesystem.write_asset")
+    timeout_sec = 900
+
+    def _seedream_prompt(self, scene) -> str:
+        """由分镜卡数据构造一句中文文生图提示词。
+
+        画面是技术视频的衬底/氛围图，不承载需要精确的事实数字（Star 数等）——那些仍由
+        程序化信息卡或字幕保证。因此 prompt 只描述风格与主题，避免让模型“编造”数据。
+        """
+        d = scene.card_data or {}
+        subject = (d.get("title") or d.get("name") or d.get("one_liner")
+                   or scene.on_screen_text or "开源 AI Agent 项目")
+        style = ("深色科技风格的横版背景插画，16:9，霓虹蓝与金色点缀，几何网格与电路质感，"
+                 "现代、简洁、专业，无文字、无水印、无logo，适合作为技术解说视频的画面衬底")
+        return f"主题：{subject}。{style}"
 
     def run(self, storyboard: Storyboard) -> dict[str, Path]:
         img_dir = self.ctx.assets_dir / "images"
         images: dict[str, Path] = {}
+        provider = getattr(self.ctx, "image_provider", None)
+        s = self.ctx.settings
+        mode = getattr(s, "image_provider", "auto")
+        want_seedream = mode in ("auto", "seedream") and provider is not None and provider.configured
+        force_seedream = mode == "seedream"
+        allow_fallback = getattr(s, "image_fallback_to_template", True) and mode != "seedream"
+
+        n_real = 0
         for i, scene in enumerate(storyboard.scenes):
             out = img_dir / f"{scene.scene_id}.png"
-            cards.render_scene_image(
-                scene, out,
-                width=self.ctx.settings.video_width,
-                height=self.ctx.settings.video_height)
+            origin, prov, note = "template", "pillow", f"{scene.visual_type} 程序化信息卡"
+            made = False
+            if want_seedream or force_seedream:
+                try:
+                    provider.generate(self._seedream_prompt(scene), out)
+                    origin, prov = "real", provider.provider_name
+                    note = f"{scene.visual_type} Seedream 生图（{provider.model}）"
+                    made = True
+                    n_real += 1
+                except CapabilityUnavailable:
+                    if force_seedream:
+                        raise
+                except ProviderError as exc:
+                    self.logger.warning("[%s] Seedream 生图失败，%s：%s", self.name,
+                                        "回退 Pillow" if allow_fallback else "且不回退",
+                                        str(exc))
+                    if not allow_fallback:
+                        raise
+            if not made:
+                cards.render_scene_image(
+                    scene, out,
+                    width=self.ctx.settings.video_width,
+                    height=self.ctx.settings.video_height)
             images[scene.scene_id] = out
-            register(self.ctx.db, self.ctx.job_id, out, type="image", origin="template",
-                     provider="pillow", note=f"{scene.visual_type} 程序化信息卡",
-                     root=self.ctx.job_dir)
-        # 封面缩略图：用第一镜（标题卡）渲染 1280x720 版本
+            register(self.ctx.db, self.ctx.job_id, out, type="image", origin=origin,
+                     provider=prov, model=(provider.model if origin == "real" else ""),
+                     note=note, root=self.ctx.job_dir)
+        # 封面缩略图：始终用 Pillow 渲染（标题卡），保证含准确标题文字，标 template。
         thumb = self.ctx.job_dir / "thumbnail.png"
         first = storyboard.scenes[0]
         cards.render_thumbnail(first.card_data.get("title", ""),
                                first.card_data.get("subtitle", ""), thumb)
         register(self.ctx.db, self.ctx.job_id, thumb, type="thumbnail", origin="template",
                  provider="pillow", root=self.ctx.job_dir)
-        self.logger.info("视觉完成：%d 张信息卡 + 封面", len(images))
+        self.logger.info("视觉完成：%d 张画面（Seedream 真实 %d / Pillow 模板 %d）+ 封面",
+                         len(images), n_real, len(images) - n_real)
         return images
 
 

@@ -17,6 +17,7 @@
 | FastAPI | 0.143.0 | MIT | 本地任务 API（/jobs、/health、/artifacts） | ✅ |
 | Uvicorn | 0.54.0 | BSD-3-Clause | ASGI 运行时 | ✅ |
 | 火山方舟 | Coding Plan `/api/plan/v3`，模型 `ark-code-latest` | 商业服务 | 研究/核验/点评/编剧文本 | ✅ 实测返回中文与 usage |
+| 火山方舟 Seedream | Agent Plan `/api/plan/v3`，`doubao-seedream-5-0-pro` | 商业服务 | 分镜场景图（可选，首选画面） | ✅ 真实 `images/generations` 接入（v1.2.0）；需 Agent Plan 专属 Key，未配置回退 Pillow |
 | GitHub REST API | v2022-11-28 | 服务条款 | 搜索/仓库元数据/README | ✅ Token 用户 guosheng1530 |
 | OpenClaw | 2026.4.11 (c836fd2) | 开源（见其仓库） | 入口/通知 | ⚠️ 已安装；健康探测真实，通知默认关 |
 | Ruflo | npm 3.56.7（未安装） | MIT | Agent swarm（候选） | ⚠️ npm 包实测归属 ruvnet/claude-flow，拒绝猜测式接入 |

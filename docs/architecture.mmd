@@ -20,10 +20,10 @@ flowchart TB
   RANK --> ARK
   SCRIPT --> ARK
   STORY --> ARK
-  VISUAL --> IMG["火山方舟图片 API<br/>若账号已开通"]
+  VISUAL --> IMG["火山方舟 Seedream 生图 API<br/>Agent Plan /api/plan/v3 · doubao-seedream-5-0-pro<br/>已接入(v1.2.0)，需专属 Key"]
   VISUAL --> VID["火山方舟视频 API<br/>若账号已开通"]
   AUDIO --> TTS["火山方舟 TTS API<br/>若账号已开通"]
-  VISUAL --> FALLBACK["开源本地回退<br/>Pillow / SVG / 项目截图"]
+  VISUAL --> FALLBACK["Pillow 程序化信息卡<br/>默认 / 生图未配置或失败时回退(origin=template)"]
   AUDIO --> AUDIOFALLBACK["明确标注的测试音轨 / 可选开源 TTS"]
   RENDER --> FFMPEG["FFmpeg + ffprobe<br/>合成 / 编码 / 质量检查"]
   IMG --> ASSETS["素材目录 / Provider job ID"]

@@ -32,6 +32,7 @@ class AgentContext:
     llm: ArkTextClient | None = None
     github: GitHubClient | None = None
     tts: TTSChain | None = None
+    image_provider: Any = None  # ArkImageProvider | None（避免循环导入，用 Any）
 
     @property
     def assets_dir(self) -> Path:

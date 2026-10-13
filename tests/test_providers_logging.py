@@ -127,9 +127,10 @@ def test_transient_failures_are_retried_and_recorded_ok_false(monkeypatch):
     assert all(r["ok"] is False and "503" in r["redacted_error"] for r in rows)
 
 
-def test_unconfigured_media_capabilities_raise():
+def test_unconfigured_media_capabilities_raise(tmp_path):
+    # 未配置 model/key 时，generate 在真正落盘前就抛 CapabilityUnavailable。
     with pytest.raises(CapabilityUnavailable) as e:
-        ArkImageProvider().generate("x")
+        ArkImageProvider().generate("x", tmp_path / "x.png")
     assert e.value.capability == "ark_image"
     with pytest.raises(CapabilityUnavailable):
         ArkVideoProvider().submit("x")

@@ -171,8 +171,42 @@ class Settings:
     # ---- GitHub ----
     github_token: str = field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
 
-    # ---- 未开通的媒体能力（留空 = not_configured）----
+    # ---- 火山方舟 Agent Plan 图片生成（Seedream，v1.2.0 新增）----
+    # 重要：Agent Plan 使用**专属** Base URL（路径含 /plan）与**专属** API Key，
+    # 二者均不同于标准方舟 /api/v3，也不同于 Coding Plan 的 Key；混用会 401 或产生额外费用。
+    #   * ARK_IMAGE_MODEL   留空 = not_configured（VisualAgent 自动回退 Pillow 信息卡）；
+    #                       开通 Agent Plan 生图后填 `doubao-seedream-5-0-pro`。
+    #   * ARK_IMAGE_API_KEY 留空则回退到 LLM_API_KEY（仅当两者同属 Agent Plan 时才正确）。
+    #   * ARK_IMAGE_BASE_URL 默认 Agent Plan 专属端点。
     ark_image_model: str = field(default_factory=lambda: os.getenv("ARK_IMAGE_MODEL", ""))
+    ark_image_base_url: str = field(
+        default_factory=lambda: os.getenv(
+            "ARK_IMAGE_BASE_URL", "https://ark.cn-beijing.volces.com/api/plan/v3"))
+    ark_image_api_key: str = field(
+        default_factory=lambda: os.getenv("ARK_IMAGE_API_KEY", "")
+        or os.getenv("LLM_API_KEY", ""))
+    # size 取 1K/1.5K/2K 预设或精确像素（如 2048x1152 的 16:9）。seedream-5-0-pro 仅支持
+    # 1K/2K 预设；默认用 2K 兼顾清晰度与速度（横图由模型按内容选比例，若需固定 16:9 用精确像素）。
+    ark_image_size: str = field(default_factory=lambda: os.getenv("ARK_IMAGE_SIZE", "2K"))
+    ark_image_output_format: str = field(
+        default_factory=lambda: os.getenv("ARK_IMAGE_OUTPUT_FORMAT", "png"))
+    # 商用成片通常关水印；默认关闭（显式 false），需要可用 ARK_IMAGE_WATERMARK=1 打开。
+    ark_image_watermark: bool = field(
+        default_factory=lambda: os.getenv("ARK_IMAGE_WATERMARK", "0").strip().lower()
+        in ("1", "true", "yes", "on"))
+    # seedream-5-0-pro 实测约 2 分钟/张，客户端超时需 ≥240s。
+    ark_image_timeout: float = field(
+        default_factory=lambda: float(os.getenv("ARK_IMAGE_TIMEOUT", "300")))
+    # 画面来源策略：auto=有配置就用 Seedream、失败回退 Pillow；pillow=强制程序化信息卡；
+    # seedream=强制生图（未配置则抛 CapabilityUnavailable，不回退——用于验证真实接入）。
+    image_provider: str = field(
+        default_factory=lambda: os.getenv("IMAGE_PROVIDER", "auto").strip().lower())
+    # Seedream 失败是否回退 Pillow（仅在 image_provider=auto 时生效）。
+    image_fallback_to_template: bool = field(
+        default_factory=lambda: os.getenv("IMAGE_FALLBACK_TO_TEMPLATE", "1").strip().lower()
+        not in ("0", "false", "no", "off"))
+
+    # ---- 其余未开通的媒体能力（留空 = not_configured）----
     ark_video_model: str = field(default_factory=lambda: os.getenv("ARK_VIDEO_MODEL", ""))
     ark_tts_model: str = field(default_factory=lambda: os.getenv("ARK_TTS_MODEL", ""))
 

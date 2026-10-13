@@ -46,6 +46,24 @@ def _attach_ark_client(wf):
     return llm
 
 
+def _attach_image_provider(wf):
+    """按配置接入火山方舟 Agent Plan Seedream 生图；未配置则返回 None（VisualAgent 回退 Pillow）。
+
+    计量接到工作流预算，成功生图写入 SQLite api_calls（kind=image）。
+    """
+    s = wf.settings
+    if not s.image_capability_configured:
+        return None
+    from videoforge.providers.ark_media import ArkImageProvider
+    provider = ArkImageProvider(
+        s.ark_image_model, api_key=s.ark_image_api_key, base_url=s.ark_image_base_url,
+        size=s.ark_image_size, output_format=s.ark_image_output_format,
+        watermark=s.ark_image_watermark, timeout=s.ark_image_timeout, budget=wf.budget)
+    wf.image_provider = provider
+    wf.ctx.image_provider = provider
+    return provider
+
+
 def cmd_check(args) -> int:
     s = get_settings()
     print(f"AgentVideoForge v{__version__} 环境核查\n" + "=" * 56)
@@ -65,7 +83,16 @@ def cmd_check(args) -> int:
     print(f"方舟文本    : key={'已配置' if s.ark_api_key else '❌ 缺失'}, model={s.ark_model}")
     print(f"  base_url  : {s.ark_base_url}")
     print(f"GitHub      : token={'已配置' if s.github_token else '未配置（低额度运行）'}")
-    print(f"图片/视频/TTS: 未配置（回退程序化画面 + 本地语音）")
+    if s.image_capability_configured:
+        print(f"生图(Seedream): model={s.ark_image_model}, size={s.ark_image_size}, "
+              f"水印={'开' if s.ark_image_watermark else '关'}")
+        print(f"  base_url  : {s.ark_image_base_url}  (Agent Plan 专属，含 /plan)")
+        print(f"  key       : {'已配置专属 Key' if s.ark_image_api_key else '❌ 缺失'}；"
+              f"策略 IMAGE_PROVIDER={s.image_provider}")
+    else:
+        print("生图(Seedream): 未配置（回退 Pillow 程序化信息卡）；"
+              "开通 Agent Plan 后填 ARK_IMAGE_MODEL=doubao-seedream-5-0-pro")
+    print(f"视频/TTS    : 未配置（回退程序化画面 + 本地语音）")
     if not args.no_ping and s.ark_api_key:
         print("\n正在发送最小真实请求验证方舟文本（max_tokens=16）...")
         try:
@@ -108,7 +135,9 @@ def cmd_run(args) -> int:
     wf = Workflow(settings=s, mode="real", llm=None, github=github, tts=tts,
                   job_id=getattr(args, "job_id", None))
     _attach_ark_client(wf)
+    img = _attach_image_provider(wf)
     print(f"启动真实任务 {wf.job_id}（方舟 {s.ark_model} + GitHub）")
+    print(f"   画面：{'Seedream ' + img.model + '（失败回退 Pillow）' if img else 'Pillow 程序化信息卡'}")
     try:
         wf.run(resume=args.resume)
     finally:

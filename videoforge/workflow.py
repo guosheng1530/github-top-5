@@ -37,7 +37,7 @@ from videoforge.schemas import JobStatus, StageName
 class Workflow:
     def __init__(self, *, settings: Settings | None = None, mode: str = "real",
                  job_id: str | None = None, topic: str = "近期热门 AI Agent 开源项目 Top 5",
-                 llm=None, github=None, tts=None, logger=None):
+                 llm=None, github=None, tts=None, image_provider=None, logger=None):
         self.settings = settings or get_settings()
         self.mode = mode
         self.job_id = job_id or time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
@@ -58,11 +58,12 @@ class Workflow:
         self.llm = llm
         self.github = github
         self.tts = tts
+        self.image_provider = image_provider
         self._closed = False
         self.ctx = AgentContext(
             job_id=self.job_id, settings=self.settings, db=self.db,
             budget=self.budget, job_dir=self.job_dir, logger=self.logger,
-            llm=llm, github=github, tts=tts)
+            llm=llm, github=github, tts=tts, image_provider=image_provider)
 
     def close(self) -> None:
         """释放外部资源：SQLite 连接、HTTP 客户端。
@@ -75,7 +76,7 @@ class Workflow:
         if self._closed:
             return
         self._closed = True
-        for obj in (self.llm, self.github):
+        for obj in (self.llm, self.github, self.image_provider):
             try:
                 if obj is not None and hasattr(obj, "close"):
                     obj.close()
@@ -105,9 +106,15 @@ class Workflow:
         oc = OpenClawAdapter()
         rf = RufloAdapter()
         oc_info = oc.detect()
+        if self.image_provider is not None and getattr(self.image_provider, "configured", False):
+            ark_image = (f"verified (Agent Plan plan/v3, {self.image_provider.model}, "
+                         f"size={self.settings.ark_image_size})")
+        else:
+            ark_image = ("not_configured (ARK_IMAGE_MODEL 为空；需 Agent Plan 专属 Key "
+                         "与专属 Base URL/plan，已回退 Pillow 信息卡)")
         return {
             "ark_text": "verified (plan/v3, ark-code-latest)" if self.llm else "not_used_in_demo",
-            "ark_image": "not_configured (api/v3 401, ARK_IMAGE_MODEL 为空)",
+            "ark_image": ark_image,
             "ark_video": "not_configured (api/v3 401, ARK_VIDEO_MODEL 为空)",
             "ark_tts": "not_configured (ARK_TTS_MODEL 为空)",
             "github_api": "configured" if self.github else "not_configured",
@@ -345,6 +352,9 @@ class Workflow:
             "fps": self.settings.fps,
             "candidate_pool": self.settings.candidate_pool,
             "tts_engine": self.settings.tts_engine,
+            "image_provider": (self.settings.image_provider
+                               + (f":{self.settings.ark_image_model}"
+                                  if self.settings.image_capability_configured else ":pillow")),
         }
         manifest = RunManifest(
             job_id=self.job_id, mode=self.mode,  # type: ignore[arg-type]
