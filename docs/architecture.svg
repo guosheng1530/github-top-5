@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1450" viewBox="0 0 1500 1450">
+<rect width="100%" height="100%" fill="#fff"/>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker></defs>
+<style>text{font-family:Arial,"Microsoft YaHei",sans-serif;font-size:19px;fill:#172033;text-anchor:middle}.line{stroke:#64748b;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.dash{stroke:#c2410c;stroke-width:2.5;stroke-dasharray:8 6;fill:none;marker-end:url(#arrow)}</style>
+<rect x="500" y="20" width="500" height="65" rx="13" fill="#e8eefc" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="52.5" dominant-baseline="middle">用户：自然语言任务</text>
+<rect x="500" y="115" width="500" height="75" rx="13" fill="#dceafe" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="152.5" dominant-baseline="middle">OpenClaw：入口 / 任务提交 / 通知</text>
+<path class="line" d="M750,85 L750,115"/>
+<rect x="500" y="225" width="500" height="80" rx="13" fill="#e7ddff" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="265.0" dominant-baseline="middle">业务工作流控制器：状态 / 预算 / 重试</text>
+<path class="line" d="M750,190 L750,225"/>
+<rect x="500" y="340" width="500" height="80" rx="13" fill="#e7ddff" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="380.0" dominant-baseline="middle">Ruflo：Agent Harness / Swarm</text>
+<path class="line" d="M750,305 L750,340"/>
+<rect x="500" y="455" width="500" height="80" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="495.0" dominant-baseline="middle">SQLite：任务状态 / 事件 / 产物索引</text>
+<path class="line" d="M750,420 L750,455"/>
+<rect x="20" y="590" width="260" height="75" rx="13" fill="#f3e8ff" stroke="#64748b" stroke-width="2"/>
+<text x="150.0" y="627.5" dominant-baseline="middle">A1 趋势发现</text>
+<path class="line" d="M750,535 L150,590"/>
+<rect x="315" y="590" width="260" height="75" rx="13" fill="#f3e8ff" stroke="#64748b" stroke-width="2"/>
+<text x="445.0" y="627.5" dominant-baseline="middle">A2 项目研究</text>
+<path class="line" d="M750,535 L445,590"/>
+<rect x="610" y="590" width="260" height="75" rx="13" fill="#f3e8ff" stroke="#64748b" stroke-width="2"/>
+<text x="740.0" y="627.5" dominant-baseline="middle">A3 事实核验</text>
+<path class="line" d="M750,535 L740,590"/>
+<rect x="905" y="590" width="260" height="75" rx="13" fill="#f3e8ff" stroke="#64748b" stroke-width="2"/>
+<text x="1035.0" y="627.5" dominant-baseline="middle">A4 排名选题</text>
+<path class="line" d="M750,535 L1035,590"/>
+<rect x="1200" y="590" width="260" height="75" rx="13" fill="#f3e8ff" stroke="#64748b" stroke-width="2"/>
+<text x="1330.0" y="627.5" dominant-baseline="middle">A5 中文编剧</text>
+<path class="line" d="M750,535 L1330,590"/>
+<rect x="20" y="735" width="260" height="75" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="150.0" y="772.5" dominant-baseline="middle">A6 分镜策划</text>
+<path class="line" d="M150,665 L150,735"/>
+<rect x="315" y="735" width="260" height="75" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="445.0" y="772.5" dominant-baseline="middle">A7 视觉素材</text>
+<path class="line" d="M445,665 L445,735"/>
+<rect x="610" y="735" width="260" height="75" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="740.0" y="772.5" dominant-baseline="middle">A8 配音字幕</text>
+<path class="line" d="M740,665 L740,735"/>
+<rect x="905" y="735" width="260" height="75" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="1035.0" y="772.5" dominant-baseline="middle">A9 视频制作</text>
+<path class="line" d="M1035,665 L1035,735"/>
+<rect x="1200" y="735" width="260" height="75" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="1330.0" y="772.5" dominant-baseline="middle">A10 质量审核</text>
+<path class="line" d="M1330,665 L1330,735"/>
+<rect x="20" y="895" width="260" height="90" rx="13" fill="#e2f4e8" stroke="#64748b" stroke-width="2"/>
+<text x="150.0" y="940.0" dominant-baseline="middle">GitHub REST API</text>
+<rect x="315" y="895" width="260" height="90" rx="13" fill="#e2f4e8" stroke="#64748b" stroke-width="2"/>
+<text x="445.0" y="940.0" dominant-baseline="middle">火山方舟文本 API</text>
+<rect x="610" y="895" width="260" height="90" rx="13" fill="#e2f4e8" stroke="#64748b" stroke-width="2"/>
+<text x="740.0" y="927.0" dominant-baseline="middle">图片 / 视频 / TTS API</text>
+<text x="740.0" y="953.0" dominant-baseline="middle">仅限已开通能力</text>
+<rect x="905" y="895" width="260" height="90" rx="13" fill="#e2f4e8" stroke="#64748b" stroke-width="2"/>
+<text x="1035.0" y="940.0" dominant-baseline="middle">Pillow / SVG 模板回退</text>
+<rect x="1200" y="895" width="260" height="90" rx="13" fill="#e2f4e8" stroke="#64748b" stroke-width="2"/>
+<text x="1330.0" y="940.0" dominant-baseline="middle">FFmpeg / ffprobe</text>
+<path class="line" d="M150,810 L150,895"/>
+<path class="line" d="M445,810 L445,895"/>
+<path class="line" d="M740,810 L740,895"/>
+<path class="line" d="M1035,810 L1035,895"/>
+<path class="line" d="M1330,810 L1330,895"/>
+<rect x="300" y="1060" width="900" height="85" rx="13" fill="#fff0d7" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="1102.5" dominant-baseline="middle">质量门禁：问题 → 定向返工（最多 2 轮） / 通过 → 交付</text>
+<path class="line" d="M1330,810 L1200,1060"/>
+<rect x="300" y="1200" width="900" height="100" rx="13" fill="#dceafe" stroke="#64748b" stroke-width="2"/>
+<text x="750.0" y="1250.0" dominant-baseline="middle">MP4 + 封面 + SRT + 脚本 + JSON + QA 报告</text>
+<path class="line" d="M750,1145 L750,1200"/>
+<path class="dash" d="M1200,1100 L1460,1100"/>
+<path class="dash" d="M1460,1100 L1460,380"/>
+<path class="dash" d="M1460,380 L1000,380"/>
+<text x="1350" y="1080" style="font-size:16px;fill:#c2410c">定向返工回路</text>
+</svg>

@@ -1,0 +1,13 @@
+# 本机实测锁定版本（Python 3.14.4 / Windows 10，2026-10-12）
+httpx==0.28.1
+pydantic==2.14.1
+pillow==12.3.0
+pytest==9.1.1
+tenacity==9.2.1
+edge-tts==7.2.8
+pyttsx3==2.99
+pywin32==312
+fastapi==0.143.0
+uvicorn==0.54.0
+# 系统依赖（不通过 pip）：FFmpeg 8.1 full build；Node.js 24（OpenClaw 运行时）
+# edge-tts 许可证为 GPL-3.0；默认 TTS 引擎不依赖它（使用系统 SAPI5）

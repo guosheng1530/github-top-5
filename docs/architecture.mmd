@@ -1,0 +1,40 @@
+flowchart TB
+  USER["用户：自然语言需求"] --> OC["OpenClaw<br/>交互入口 / 任务提交 / 通知"]
+  OC --> AD["OpenClaw Adapter<br/>按实际版本核实 Tool / Skill / Gateway"]
+  AD --> WF["应用工作流控制器<br/>任务状态机 / 依赖 / 预算 / 重试"]
+  WF <--> RF["Ruflo<br/>Agent 协作 / Swarm / Harness"]
+  WF --> DB[("SQLite<br/>任务状态 / 事件 / 产物索引")]
+  WF --> GHA["GitHub Discovery Agent"]
+  WF --> RESEARCH["Research Agent"]
+  WF --> FACT["Fact-check Agent"]
+  WF --> RANK["Ranking Agent"]
+  WF --> SCRIPT["Script Agent"]
+  WF --> STORY["Storyboard Agent"]
+  WF --> VISUAL["Visual Asset Agent"]
+  WF --> AUDIO["Voice & Subtitle Agent"]
+  WF --> RENDER["Video Render Agent"]
+  WF --> QA["Quality Review Agent"]
+  GHA --> GH["GitHub REST API<br/>官方仓库数据"]
+  RESEARCH --> ARK["火山方舟文本模型 API"]
+  FACT --> ARK
+  RANK --> ARK
+  SCRIPT --> ARK
+  STORY --> ARK
+  VISUAL --> IMG["火山方舟图片 API<br/>若账号已开通"]
+  VISUAL --> VID["火山方舟视频 API<br/>若账号已开通"]
+  AUDIO --> TTS["火山方舟 TTS API<br/>若账号已开通"]
+  VISUAL --> FALLBACK["开源本地回退<br/>Pillow / SVG / 项目截图"]
+  AUDIO --> AUDIOFALLBACK["明确标注的测试音轨 / 可选开源 TTS"]
+  RENDER --> FFMPEG["FFmpeg + ffprobe<br/>合成 / 编码 / 质量检查"]
+  IMG --> ASSETS["素材目录 / Provider job ID"]
+  VID --> ASSETS
+  TTS --> ASSETS
+  FALLBACK --> ASSETS
+  AUDIOFALLBACK --> ASSETS
+  ASSETS --> RENDER
+  RENDER --> QA
+  QA -->|"问题：最多两轮定向返工"| WF
+  QA -->|"通过"| OUTPUT["MP4 / 封面 / SRT / 脚本 / JSON / 说明报告"]
+  OUTPUT --> OC
+  SAFE["安全与成本控制<br/>密钥脱敏 / 限流 / 预算 / 审计日志"] -.-> WF
+  SAFE -.-> ARK
