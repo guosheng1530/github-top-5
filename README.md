@@ -106,6 +106,25 @@ bash scripts/tests.sh
 `HARD_BUDGET_CALLS/HARD_BUDGET_TOKENS`、
 `LOCAL_API_HOST/PORT/TOKEN`。详见 [.env.example](.env.example)。
 
+### 换机/新检出后启用 Seedream 生图
+
+`.env` 含密钥，**不随仓库提交**（见 `.gitignore`）。因此拉取 tag（如 `v1.3.0`）到新机器后，
+生图默认是「未配置 → 回退 Pillow 信息卡」。要启用真实 Seedream 生图，按以下步骤：
+
+1. 复制 `.env.example` 为 `.env`，填入你的 `LLM_API_KEY`（Agent Plan 专属 Key）；
+2. 在 `.env` 设 `ARK_IMAGE_MODEL=doubao-seedream-5-0-pro`
+   （`ARK_IMAGE_BASE_URL` 默认已是 Agent Plan 专属 `…/api/plan/v3`；
+   `ARK_IMAGE_API_KEY` 留空会回退 `LLM_API_KEY`，仅当该 Key 属 Agent Plan 时才可用）；
+3. `IMAGE_PROVIDER` 保持 `auto`（生图失败自动回退 Pillow）；要强制验证真实接入可临时设
+   `seedream`（失败即报错、不回退）；
+4. 核查：`bash scripts/check.sh`（或 `python -m videoforge.cli check`）的「生图(Seedream)」行
+   应显示 `model=doubao-seedream-5-0-pro …（Agent Plan 专属，含 /plan）`；
+5. 产物核验：`run` 后 `output/<job_id>/run_manifest.json` 的
+   `capabilities.ark_image=verified`、各 `assets/images/scene-*.png` 的 `origin=real`。
+
+> Coding Plan 的 Key 调用生图会 401；必须用 Agent Plan 专属 Key。未开通时无需任何改动，
+> 系统按设计回退 Pillow 并如实标注 `origin=template`。
+
 ## 本地 API（可选）
 
 ```powershell
