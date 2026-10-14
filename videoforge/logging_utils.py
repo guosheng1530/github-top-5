@@ -21,6 +21,8 @@ _SECRET_PATTERNS = [
     re.compile(r"gh[pousr]_[A-Za-z0-9]{6,}"),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9\-._~+/]{6,}"),
     re.compile(r"(?i)(authorization[\"'\s:=]+)[A-Za-z0-9\-._~+/]{8,}"),
+    # 企业微信群机器人 Webhook 的 key（?key=xxxx 或 &key=xxxx）
+    re.compile(r"(?i)([?&]key=)[A-Za-z0-9\-]{8,}"),
 ]
 
 

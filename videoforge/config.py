@@ -245,6 +245,16 @@ class Settings:
     price_input_per_1k: float = field(default_factory=lambda: float(os.getenv("PRICE_INPUT_PER_1K", "0")))
     price_output_per_1k: float = field(default_factory=lambda: float(os.getenv("PRICE_OUTPUT_PER_1K", "0")))
 
+    # ---- 企业微信群机器人通知（默认关闭；显式 opt-in）----
+    # WECHAT_NOTIFY=1 且 WECHAT_WEBHOOK_URL 配置后，任务完成会推送一条文本通知。
+    # 获取方式：企业微信群 → 右上角 → 添加群机器人 → 复制 Webhook 地址
+    #   （形如 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx）。
+    wechat_notify: bool = field(
+        default_factory=lambda: os.getenv("WECHAT_NOTIFY", "0").strip().lower()
+        in ("1", "true", "yes", "on"))
+    wechat_webhook_url: str = field(
+        default_factory=lambda: os.getenv("WECHAT_WEBHOOK_URL", ""))
+
     # ---- 本地 API（FastAPI）----
     local_api_host: str = field(default_factory=lambda: os.getenv("LOCAL_API_HOST", "127.0.0.1"))
     local_api_port: int = field(default_factory=lambda: int(os.getenv("LOCAL_API_PORT", "8765")))
