@@ -377,5 +377,13 @@ class Workflow:
             result = OpenClawAdapter(notify_enabled=True).notify_completion(
                 self.job_id, str(self.job_dir / "final_video.mp4"), report.passed)
             self.logger.info("OpenClaw 通知：%s", result)
+        # 企业微信群机器人通知（默认关闭：需 WECHAT_NOTIFY=1 且配置 Webhook）
+        if self.settings.wechat_notify:
+            from videoforge.integrations.wechat_adapter import WeChatAdapter
+            wx = WeChatAdapter(self.settings.wechat_webhook_url, notify_enabled=True)
+            wx_result = wx.notify_completion(
+                self.job_id, str(self.job_dir / "final_video.mp4"),
+                report.passed, duration_sec=report.duration_sec)
+            self.logger.info("企业微信通知：%s", wx_result)
         # 数据库连接由调用方在任务结束后统一关闭（Workflow.close() / 上下文管理器）；
         # 此处 finalize 已完成全部落库，终态与产物均已持久化。
