@@ -9,7 +9,12 @@
 1. **生产工具**：真的能跑出视频；
 2. **学习项目**：[docs/TECHNICAL_MANUAL.md](docs/TECHNICAL_MANUAL.md) 逐模块解释
    Agent、Pydantic 契约、SQLite 状态机、API 适配器、预算幂等、FFmpeg、自动化测试。
+入口方式
+  
+  - CLI：python -m videoforge.cli {check|demo|run|serve|jobs}
+  - 跨平台脚本：scripts/*.sh（Linux/macOS）、scripts/*.ps1（Windows），自动探测虚拟环境
 
+  - 
 ## 快速开始（Windows）
 
 ```powershell
@@ -54,6 +59,22 @@ bash scripts/run.sh
 
 # 6) 运行全部测试
 bash scripts/tests.sh
+
+
+
+## 直接调用模块（windows/Linux / macOS）
+
+# 1)  方式一：显式指定 venv 的 python（推荐，省心）
+  
+        .venv-linux/bin/python -m videoforge.cli check
+        .venv-linux/bin/python -m videoforge.cli demo
+  
+     方式二：先激活再调（之后直接用 python 即可）
+  
+     source .venv-linux/bin/activate
+     python -m videoforge.cli check
+     python -m videoforge.cli check
+
 ```
 
 > **跨平台说明**：所有脚本都会**自动探测**虚拟环境里的 Python，无需手动指定。
